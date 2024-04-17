@@ -1,0 +1,15 @@
+server:
+  port: 8081
+
+feign:
+  okhttp:
+    enabled: true # 开启OKHttp连接池支持
+
+
+tw:
+  db:
+    database: tw-user
+  swagger:
+    title: 用户相关接口
+    group: 用户
+    package: com.example.user.controller

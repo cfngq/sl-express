@@ -1,0 +1,15 @@
+server:
+  port: 8085
+
+feign:
+  okhttp:
+    enabled: true # 开启OKHttp连接池支持
+
+
+tw:
+  db:
+    database: tw-pay
+  swagger:
+    title: 支付相关接口
+    group: 支付
+    package: com.example.pay.controller

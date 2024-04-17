@@ -1,0 +1,16 @@
+server:
+  port: 8082
+
+feign:
+  okhttp:
+    enabled: true # 开启OKHttp连接池支持
+
+
+tw:
+  db:
+    database: tw-item
+  swagger:
+    title: 商品相关接口
+    group: 商品
+    package: com.example.item.controller
+

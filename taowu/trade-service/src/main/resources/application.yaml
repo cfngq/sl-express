@@ -1,0 +1,14 @@
+server:
+  port: 8084
+
+feign:
+  okhttp:
+    enabled: true # 开启OKHttp连接池支持
+
+tw:
+  db:
+    database: tw-trade
+  swagger:
+    title: 交易相关接口
+    group: 交易
+    package: com.example.trade.controller
