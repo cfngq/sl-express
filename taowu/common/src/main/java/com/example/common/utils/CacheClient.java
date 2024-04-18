@@ -28,10 +28,35 @@ public class CacheClient {
     //线程池 实现互斥锁
     private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);
 
+    //读取缓存数据
+    public String get(String key){
+        return stringRedisTemplate.opsForValue().get(key);
+    }
+    //读取hash数据
+    public Object getHash(String key,String hashKey){
+        return stringRedisTemplate.opsForHash().get(key,hashKey);
+    }
+
+    //Key设置过期时间
+    public void expire(String key,Long time, TimeUnit timeUnit){
+        stringRedisTemplate.expire(key,time,timeUnit);
+    }
+    //删除数据
+    public Boolean delete(String key){
+        return stringRedisTemplate.delete(key);
+    }
     //存入可过期缓存数据 key value time TimeUnit
     public void set(String key, Object value, Long time, TimeUnit timeUnit){
         stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(value),time,timeUnit);
     }
+    //存入可过期的hash集合
+    public void setHash(String key,String key1,String key2,String key3,Object value1,Object value2,Object value3,Long time,TimeUnit timeUnit){
+        stringRedisTemplate.opsForHash().put(key,key1,value1);
+        stringRedisTemplate.opsForHash().put(key,key2,value2);
+        stringRedisTemplate.opsForHash().put(key,key3,value3);
+        expire(key,time,timeUnit);
+    }
+
 
     //存入逻辑过期数据 key value 逻辑过期时间
     public void setLogicalExpire(String key,Object value,Long time,TimeUnit timeUnit){

@@ -2,4 +2,5 @@ org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
   com.example.common.utils.CacheClient,\
   com.example.common.config.MvcConfig,\
   com.example.common.config.MqConfig,\
+  com.example.common.config.RedissonConfig,\
   com.example.common.utils.RedisIdWork

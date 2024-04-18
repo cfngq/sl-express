@@ -21,6 +21,7 @@ import java.util.List;
  */
 public interface IItemService extends IService<Item> {
 
+    Result<ItemDTO> getItemById(Long id);
     Result<String> updateStatus(Long id, Integer status);
 
     Result<String> updateItem(ItemDTO itemDTO);

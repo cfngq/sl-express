@@ -1,11 +1,15 @@
 package com.example.trade.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.db.Db;
 import com.example.api.client.ItemClient;
 import com.example.api.client.PayClient;
 import com.example.api.domain.dto.ItemDTO;
 import com.example.api.domain.dto.PayApplyDTO;
+import com.example.common.exception.BadCancelOrderException;
+import com.example.common.exception.NoItemException;
 import com.example.common.result.Result;
 import com.example.common.utils.RabbitMqHelper;
 import com.example.common.utils.UserHolder;
@@ -43,7 +47,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private final ItemClient itemClient;
     private final IOrderDetailService orderDetailService;
     private final RabbitMqHelper rabbitMqHelper;
-    private final PayClient payClient;
     /**
      * 新增交易单
      */
@@ -60,6 +63,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         //远程调用查询并判断商品是否存在
         Result<List<ItemDTO>> result = itemClient.getItemByIds(ids);
         List<ItemDTO> itemDTOList = result.getData();
+        if (CollectionUtil.isEmpty(itemDTOList)){
+            throw new NoItemException("商品不存在，无法下单");
+        }
         //计算商品价格并封装
         int total = 0;
         for (ItemDTO itemDTO:itemDTOList){
@@ -120,20 +126,28 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return Result.success("更新支付状态成功");
     }
 
+    //取消订单并返回库存
     @Override
     @GlobalTransactional
     public Result<String> cancelOrder(Long orderId) {
-        boolean b = lambdaUpdate()
-                .set(Order::getStatus, 5)
-                .eq(Order::getId, orderId)
-                .update();
-        if (b){
-            //todo 返回库存,mq消息通知
-            //获取交易单详情
-            List<OrderDetail> orderDetailList = orderDetailService.getByOrderId(orderId);
-            List<OrderDetailDTO> orderDetailDTOS = BeanUtil.copyToList(orderDetailList, OrderDetailDTO.class);
-            rabbitMqHelper.sendMessage("item.topic","item.num",orderDetailDTOS);
+        //取消订单
+        boolean b = false;
+        try {
+            b = lambdaUpdate()
+                    .set(Order::getStatus, 5)
+                    .eq(Order::getId, orderId)
+                    .update();
+        } catch (Exception e) {
+            throw new BadCancelOrderException("订单取消失败");
         }
+        //返回库存
+        if (!b){
+           return Result.error("订单取消失败:"+orderId);
+        }
+        //获取交易单详情
+        List<OrderDetail> orderDetailList = orderDetailService.getByOrderId(orderId);
+        List<OrderDetailDTO> orderDetailDTOS = BeanUtil.copyToList(orderDetailList, OrderDetailDTO.class);
+        rabbitMqHelper.sendMessage("item.topic","item.num",orderDetailDTOS);
         return Result.success("取消订单成功");
     }
 }

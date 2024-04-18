@@ -16,6 +16,8 @@
         <module>cart-service</module>
         <module>api</module>
         <module>trade-service</module>
+        <module>gateway</module>
+        <module>pay-service</module>
     </modules>
 
     <parent>

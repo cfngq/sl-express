@@ -21,10 +21,7 @@ public class RedisConstants {
     public static final String USER_SIGN_KEY = "sign:";
     public static final String USER_KEY = "user:code:";
     public static final Long USER_TTL = 2L;
-    public static final String SEARCH_KEY = "search:";
-    public static final String TOTAL_KEY = "total:";
-    public static final String PAGES_KEY = "pages:";
-    public static final String DATA_KEY = "data:";
+
     public static final Long SEARCH_TTL = 2L;
 
 }

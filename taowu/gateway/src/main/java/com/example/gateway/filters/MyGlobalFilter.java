@@ -2,13 +2,13 @@ package com.example.gateway.filters;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import com.example.common.utils.CacheClient;
 import com.example.gateway.config.AuthProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
@@ -28,7 +28,7 @@ import static com.example.common.constant.RedisConstants.LOGIN_USER_TTL;
 public class MyGlobalFilter implements GlobalFilter, Ordered {
 
     private final AuthProperties authProperties;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final CacheClient cacheClient;
 
     private final AntPathMatcher antPathMatcher = new AntPathMatcher();
     @Override
@@ -51,9 +51,9 @@ public class MyGlobalFilter implements GlobalFilter, Ordered {
         String tokenKey = LOGIN_USER_KEY + token;
         String userId;
         try {
-             userId = stringRedisTemplate.opsForValue().get(tokenKey);
+             userId = cacheClient.get(tokenKey);
             //刷新token有效期
-            stringRedisTemplate.expire(tokenKey,LOGIN_USER_TTL, TimeUnit.MINUTES);
+            cacheClient.expire(tokenKey,LOGIN_USER_TTL, TimeUnit.MINUTES);
         }
         catch (Exception e){
             //无用户信息，拦截

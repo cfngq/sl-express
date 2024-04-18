@@ -1,8 +1,11 @@
 package com.example.user.service;
 
+import com.example.common.result.Result;
 import com.example.user.domain.dto.AddressDTO;
 import com.example.user.domain.po.Address;
 import com.baomidou.mybatisplus.extension.service.IService;
+
+import java.util.List;
 
 /**
  * <p>
@@ -14,5 +17,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IAddressService extends IService<Address> {
 
-    void updateAddress(AddressDTO addressDTO);
+    Result<String> updateAddress(AddressDTO addressDTO);
+
+    Result<String> queryAll();
 }

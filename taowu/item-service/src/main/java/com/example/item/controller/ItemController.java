@@ -2,7 +2,10 @@ package com.example.item.controller;
 
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.example.common.constant.ItemConstants;
 import com.example.common.domain.Page.PageDTO;
 import com.example.common.domain.Page.PageQuery;
 import com.example.common.result.Result;
@@ -14,9 +17,12 @@ import com.example.item.service.IItemService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+
+import static com.example.common.constant.ItemConstants.ITEM_ID;
 
 /**
  * <p>
@@ -33,11 +39,10 @@ import java.util.List;
 public class ItemController {
 //搜索商品(分页)  根据商品id/ids查询商品    删除商品
     private final IItemService itemService;
-
     @GetMapping("/id")
     @ApiOperation("根据商品id查询商品")
     public Result<ItemDTO> getById(@RequestParam("id")Long id){
-        return Result.success(BeanUtil.toBean(itemService.getById(id), ItemDTO.class));
+        return itemService.getItemById(id);
     }
 
     @GetMapping

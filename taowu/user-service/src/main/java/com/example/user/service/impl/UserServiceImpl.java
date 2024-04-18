@@ -38,9 +38,8 @@ import static com.example.common.constant.RedisConstants.*;
 @Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IUserService {
 
-    private final StringRedisTemplate stringRedisTemplate;
-
     private final CacheClient cacheClient;
+    //发送验证码
     @Override
     public Result<String> sendCode(String phone) {
         //校验手机号合法性
@@ -51,12 +50,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         //生成验证码
         String code = RandomUtil.randomNumbers(4);
         //将验证码存入redis
-        stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY+phone,code,LOGIN_CODE_TTL, TimeUnit.MINUTES);
+        cacheClient.set(LOGIN_CODE_KEY+phone,code,LOGIN_CODE_TTL, TimeUnit.MINUTES);
         //发送验证码
         log.info("验证码为：{}",code);
         return Result.success(code);
     }
 
+    //基于手机号与验证码登录
     @Override
     public Result<UserLoginVo> login(UserLoginDTO loginDTO) {
         //获取手机号和密码信息
@@ -69,7 +69,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         }
         //检验验证码
         //从redis中获取验证码
-        String redisCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
+        String redisCode = cacheClient.get(LOGIN_CODE_KEY + phone);
         if (redisCode == null || !redisCode.equals(code)){
             return Result.error("验证码错误");
         }
@@ -88,7 +88,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         String token = UUID.randomUUID().toString(true);
         String tokenKey = LOGIN_USER_KEY + token;
         //将信息保存在redis中
-        stringRedisTemplate.opsForValue().set(tokenKey,user.getId().toString(),LOGIN_USER_TTL,TimeUnit.MINUTES);
+        cacheClient.set(tokenKey,user.getId().toString(),LOGIN_USER_TTL,TimeUnit.MINUTES);
         //封装返回对象
         UserLoginVo userLoginVo = BeanUtil.copyProperties(user, UserLoginVo.class);
         userLoginVo.setToken(token);
@@ -96,6 +96,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         return Result.success(userLoginVo);
     }
 
+    //查询个人信息
     @Override
     public Result<User> getMeById(Long userId) {
         User user = cacheClient.queryWithPassThrough(USER_KEY, userId, User.class, this::getById, USER_TTL, TimeUnit.MINUTES);
@@ -105,17 +106,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         return Result.success(user);
     }
 
+    //登出
     @Override
     public Result<String> loginOut(HttpServletRequest request) {
         //获取请求头中的token
         String token = request.getHeader("authorization");
         String tokenKey = LOGIN_USER_KEY + token;
-        if (!stringRedisTemplate.delete(tokenKey)){
+        if (!cacheClient.delete(tokenKey)){
             return Result.error("错误,登出失败");
         }
         return Result.success("登出成功");
     }
 
+    //用户支付
     @Override
     public Result<String> deductMoney(Integer amount) {
         //根据用户id进行余额扣减
@@ -126,11 +129,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
                     .eq(User::getId,userId)
                     .update();
         } catch (Exception e) {
-            return Result.error("扣款失败，余额可能不足");
+            log.error("用户余额不足，扣款失败");
+            return Result.error("支付失败，余额可能不足");
         }
-        return Result.success("扣款成功");
+        return Result.success("支付成功，已扣减余额");
     }
 
+    //新建用户
     private User createUserWithPhone(UserLoginDTO loginDTO) {
         //新建用户
         User user = new User();

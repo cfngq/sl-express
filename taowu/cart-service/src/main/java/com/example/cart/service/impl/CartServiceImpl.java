@@ -2,6 +2,7 @@ package com.example.cart.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollectionUtil;
+import cn.hutool.json.JSONUtil;
 import com.example.api.client.ItemClient;
 import com.example.api.domain.dto.ItemDTO;
 import com.example.cart.domain.dto.CartFormDTO;
@@ -11,6 +12,7 @@ import com.example.cart.mapper.CartMapper;
 import com.example.cart.service.ICartService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.common.result.Result;
+import com.example.common.utils.CacheClient;
 import com.example.common.utils.UserHolder;
 import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
@@ -20,8 +22,12 @@ import org.springframework.stereotype.Service;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static com.example.common.constant.CartConstants.CART_KEY;
+import static com.example.common.constant.CartConstants.CART_KEY_TTL;
 
 /**
  * <p>
@@ -37,12 +43,29 @@ import java.util.stream.Collectors;
 public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements ICartService {
 
     private final ItemClient itemClient;
+    private final CacheClient cacheClient;
+    //查询用户购物车所有数据
+    //缓存
     @Override
     @GlobalTransactional
     public List<CartVO> queryAll() {
         //获取线程用户
         Long userId = UserHolder.getUserId();
+        //缓存
+        String cartKey = CART_KEY+userId;
+        String json = cacheClient.get(cartKey);
+        List<CartVO> cartVOList = JSONUtil.toList(json, CartVO.class);
+        if (!CollectionUtil.isEmpty(cartVOList)){
+            return cartVOList;
+        }
         //查询该用户购物车数据
+        List<CartVO> cartVOS = getCartList(userId);
+        cacheClient.set(cartKey,JSONUtil.toJsonStr(cartVOS),CART_KEY_TTL, TimeUnit.MINUTES);
+        return cartVOS;
+    }
+
+    //查询购物车数据
+    private List<CartVO> getCartList(Long userId) {
         List<Cart> list = lambdaQuery()
                 .eq(Cart::getUserId, userId)
                 .list();
@@ -56,6 +79,7 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
         return cartVOS;
     }
 
+    //cartVOS封装商品数据
     private void handleCartItems(List<CartVO> cartVOS) {
         //获取商品ids集合
         List<Long> ids = cartVOS.stream().map(CartVO::getItemId).collect(Collectors.toList());
@@ -74,7 +98,10 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
         });
     }
 
+    //todo 购物车数量判断
+    //更新购物车则更新缓存
     @Override
+    @GlobalTransactional
     public Result<String> saveCart(CartFormDTO cartFormDTO) {
         //获取用户信息
         Long userId = UserHolder.getUserId();
@@ -101,6 +128,10 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
         Cart cart = BeanUtil.toBean(cartFormDTO, Cart.class);
         cart.setUserId(userId);
         boolean b = save(cart);
+        //更新缓存
+        List<CartVO> cartVOS = getCartList(userId);
+        String cartKey = CART_KEY + userId;
+        cacheClient.set(cartKey,JSONUtil.toJsonStr(cartVOS),CART_KEY_TTL,TimeUnit.MINUTES);
         if (!b){
             return Result.error("添加失败");
         }

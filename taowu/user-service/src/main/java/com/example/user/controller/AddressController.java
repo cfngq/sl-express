@@ -45,16 +45,8 @@ public class AddressController {
 
     @GetMapping
     @ApiOperation("查询当前用户所有地址")
-    public Result<List<AddressDTO>> getAll(){
-        List<Address> addressList = addressService.lambdaQuery()
-                .eq(Address::getUserId, UserHolder.getUserId())
-                .list();
-        //若查询为空，则返回错误
-        if (CollectionUtil.isEmpty(addressList)){
-            return Result.error("该用户无地址信息");
-        }
-        List<AddressDTO> addressDTOList = BeanUtil.copyToList(addressList, AddressDTO.class);
-        return Result.success(addressDTOList);
+    public Result<String> getAll(){
+        return addressService.queryAll();
     }
 
     @PostMapping
@@ -67,7 +59,7 @@ public class AddressController {
 
     @PostMapping("/update")
     @ApiOperation("更新地址信息")
-    public void update(AddressDTO addressDTO){
-        addressService.updateAddress(addressDTO);
+    public Result<String> update(AddressDTO addressDTO){
+        return addressService.updateAddress(addressDTO);
     }
 }

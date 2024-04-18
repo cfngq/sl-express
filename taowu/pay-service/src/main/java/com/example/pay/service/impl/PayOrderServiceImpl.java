@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.example.api.client.UserClient;
 import com.example.common.enums.PayStatus;
+import com.example.common.exception.BadApplyPayOrderException;
 import com.example.common.result.Result;
 import com.example.common.utils.RedisIdWork;
 import com.example.common.utils.UserHolder;
@@ -37,18 +38,25 @@ public class PayOrderServiceImpl extends ServiceImpl<PayOrderMapper, PayOrder> i
     private final RedisIdWork redisIdWork;
     private final UserClient userClient;
     private final RabbitTemplate rabbitTemplate;
+
+    //生成支付单
     @Override
     public Result<String> applyPayOrder(PayApplyDTO payApplyDTO) {
         //幂等性校验
         PayOrder payOrder = checkIdempotent(payApplyDTO);
         //返回
-        return Result.success("支付单："+payOrder.getId().toString());
+        return Result.success("支付单号："+payOrder.getId());
     }
 
+    //支付
+    @Override
     @GlobalTransactional
     public Result<String> tryPayOrderByBalance(PayOrderFormDTO payOrderFormDTO) {
         //查询支付单
         PayOrder payOrder = getById(payOrderFormDTO.getId());
+        if (payOrder == null){
+            return Result.error("该支付单不存在");
+        }
         //判断是否支付
         if (!PayStatus.WAIT_BUYER_PAY.equalsValue(payOrder.getStatus())){
             //订单不为待支付，状态异常
@@ -64,7 +72,7 @@ public class PayOrderServiceImpl extends ServiceImpl<PayOrderMapper, PayOrder> i
         }
 //        //远程调用，修改订单状态
 //        tradeClient.markOrderPaySuccess(payOrder.getBizOrderNo());
-        //todo mq发送消息，异步，失败也不会回滚
+        //todo mq发送消息，异步，失败也不会回滚,延迟消息查询是否成功
         try {
             rabbitTemplate.convertAndSend("pay.topic","pay.success",payOrder.getBizOrderNo());
         } catch (AmqpException e) {
@@ -99,12 +107,12 @@ public class PayOrderServiceImpl extends ServiceImpl<PayOrderMapper, PayOrder> i
         //存在旧单，判断其是否支付
         if (PayStatus.TRADE_SUCCESS.equalsValue(olderOrder.getStatus())){
             //已支付 抛出异常
-            throw new RuntimeException("该订单已支付");
+            throw new BadApplyPayOrderException("该订单已支付");
         }
         //是否关闭
         if (PayStatus.TRADE_CLOSED.equalsValue(olderOrder.getStatus())){
             //已关闭，抛异常
-            throw new RuntimeException("该订单已关闭");
+            throw new BadApplyPayOrderException("该订单已关闭");
         }
         //支付渠道是否一致
         if (!StrUtil.equals(olderOrder.getPayChannelCode(),payApplyDTO.getPayChannelCode())){
