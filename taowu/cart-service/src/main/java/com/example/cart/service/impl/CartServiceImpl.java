@@ -2,7 +2,9 @@ package com.example.cart.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollectionUtil;
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.api.client.ItemClient;
 import com.example.api.domain.dto.ItemDTO;
 import com.example.cart.domain.dto.CartFormDTO;
@@ -17,17 +19,17 @@ import com.example.common.utils.UserHolder;
 import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.core.Message;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.example.common.constant.CartConstants.CART_KEY;
 import static com.example.common.constant.CartConstants.CART_KEY_TTL;
+import static com.example.common.constant.UserConstants.USER_HOLDER;
 
 /**
  * <p>
@@ -73,7 +75,7 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
             //购物车无数据，则返回空集合
             return Collections.emptyList();
         }
-        //todo 远程调用查询商品接口，封装VO
+        //远程调用查询商品接口，封装VO
         List<CartVO> cartVOS = BeanUtil.copyToList(list, CartVO.class);
         handleCartItems(cartVOS);
         return cartVOS;
@@ -98,7 +100,7 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
         });
     }
 
-    //todo 购物车数量判断
+
     //更新购物车则更新缓存
     @Override
     @GlobalTransactional
@@ -110,11 +112,11 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
             try {
                 lambdaUpdate()
                         //.set(Cart::getNum,lambdaQuery().eq(Cart::getId,cartFormDTO.getItemId()).eq(Cart::getUserId,userId).one().getNum()+1)
-                        .set(Cart::getNum,+1)
-                        .eq(Cart::getId,cartFormDTO.getItemId())
+                        .set(Cart::getNum,getCartNum(cartFormDTO,userId)+1)
+                        .eq(Cart::getItemId,cartFormDTO.getItemId())
                         .eq(Cart::getUserId,userId)
                         .update();
-                return Result.success("添加成功");
+                return Result.success("购物车商品数量增加成功");
             } catch (Exception e) {
                 log.error("添加失败，错误：",e);
                 return Result.error("添加失败");
@@ -135,9 +137,29 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
         if (!b){
             return Result.error("添加失败");
         }
-        return Result.success("添加成功");
+        return Result.success("新添商品至购物车成功");
     }
 
+    //todo 获取并删除购物车商品
+    @Override
+    public void removeCartItem(Message message) {
+        UserHolder.saveUserId(message.getMessageProperties().getHeader(USER_HOLDER));
+        List<Cart> list = lambdaQuery()
+                .eq(Cart::getUserId,UserHolder.getUserId())
+                .in(Cart::getItemId,(JSONUtil.toList(JSONUtil.toJsonStr(message.getBody()),Long.class)))
+                .list();
+        Set<Long> idSet = list.stream().map(Cart::getId).collect(Collectors.toSet());
+        removeByIds(idSet);
+    }
+
+    private Integer getCartNum(CartFormDTO cartFormDTO,Long userId){
+         return lambdaQuery()
+                .eq(Cart::getItemId, cartFormDTO.getItemId())
+                .eq(Cart::getUserId, userId)
+                .one()
+                .getNum();
+
+    }
     private boolean cartIsFull(Long userId) {
         Integer count = lambdaQuery()
                 .eq(Cart::getUserId, userId)
@@ -147,7 +169,7 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
 
     private boolean ItemIsExists(Long itemId, Long userId) {
         Integer count = lambdaQuery()
-                .eq(Cart::getId, itemId)
+                .eq(Cart::getItemId, itemId)
                 .eq(Cart::getUserId, userId)
                 .count();
         return count > 0;

@@ -2,15 +2,20 @@ package com.example.pay.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.example.api.client.UserClient;
+import com.example.common.domain.message.MultiDelayMessage;
 import com.example.common.enums.PayStatus;
 import com.example.common.exception.BadApplyPayOrderException;
 import com.example.common.result.Result;
+import com.example.common.utils.CacheClient;
+import com.example.common.utils.RabbitMqHelper;
 import com.example.common.utils.RedisIdWork;
 import com.example.common.utils.UserHolder;
 import com.example.pay.domain.dto.PayApplyDTO;
 import com.example.pay.domain.dto.PayOrderFormDTO;
 import com.example.pay.domain.po.PayOrder;
+import com.example.pay.domain.vo.PayOrderVO;
 import com.example.pay.mapper.PayOrderMapper;
 import com.example.pay.service.IPayOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -18,10 +23,14 @@ import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.concurrent.TimeUnit;
+
+import static com.example.common.constant.RedisConstants.PAY_ORDER_KEY;
+import static com.example.common.constant.RedisConstants.PAY_ORDER_TTL;
 
 /**
  * <p>
@@ -37,10 +46,12 @@ import java.time.LocalDateTime;
 public class PayOrderServiceImpl extends ServiceImpl<PayOrderMapper, PayOrder> implements IPayOrderService {
     private final RedisIdWork redisIdWork;
     private final UserClient userClient;
-    private final RabbitTemplate rabbitTemplate;
+    private final RabbitMqHelper rabbitMqHelper;
+    private final CacheClient cacheClient;
 
     //生成支付单
     @Override
+    @Transactional
     public Result<String> applyPayOrder(PayApplyDTO payApplyDTO) {
         //幂等性校验
         PayOrder payOrder = checkIdempotent(payApplyDTO);
@@ -74,11 +85,30 @@ public class PayOrderServiceImpl extends ServiceImpl<PayOrderMapper, PayOrder> i
 //        tradeClient.markOrderPaySuccess(payOrder.getBizOrderNo());
         //todo mq发送消息，异步，失败也不会回滚,延迟消息查询是否成功
         try {
-            rabbitTemplate.convertAndSend("pay.topic","pay.success",payOrder.getBizOrderNo());
+            rabbitMqHelper.sendMessage("pay.topic","pay.success",payOrder.getBizOrderNo());
         } catch (AmqpException e) {
             log.error("修改订单状态为支付成功的消息发送失败，支付单：{},交易单：{}",payOrder.getId(),payOrder.getBizOrderNo(),e);
         }
         return Result.success("支付成功");
+    }
+
+    //根据交易单id查询支付单
+    @Override
+    public void getByOrderId(MultiDelayMessage<Object> message) {
+        PayOrderVO orderVO;
+        Long orderId = Long.valueOf(message.getData().toString());
+        String payOrderKey = PAY_ORDER_KEY + orderId;
+        String json = cacheClient.get(payOrderKey);
+        orderVO = JSONUtil.toBean(json, PayOrderVO.class);
+        if (BeanUtil.isNotEmpty(orderVO)){
+            Result.success(orderVO);
+            return;
+        }
+        PayOrder payOrder = lambdaQuery()
+                .eq(PayOrder::getBizOrderNo, orderId)
+                .one();
+         orderVO = BeanUtil.toBean(payOrder, PayOrderVO.class);
+         cacheClient.set(payOrderKey,JSONUtil.toJsonStr(orderVO),PAY_ORDER_TTL, TimeUnit.MINUTES);
     }
 
     private boolean markPayOrderSuccess(Long id, LocalDateTime now) {

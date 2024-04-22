@@ -19,5 +19,5 @@ public interface IAddressService extends IService<Address> {
 
     Result<String> updateAddress(AddressDTO addressDTO);
 
-    Result<String> queryAll();
+    Result<List<AddressDTO>> queryAll();
 }

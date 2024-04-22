@@ -32,4 +32,3 @@ tw:
       - /search/**
       - /user/login
       - /user/code
-      - /item/**

@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.db.Db;
+import cn.hutool.json.JSONUtil;
 import com.example.api.client.ItemClient;
 import com.example.api.client.PayClient;
 import com.example.api.domain.dto.ItemDTO;
@@ -24,6 +25,9 @@ import com.example.trade.service.IOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -32,6 +36,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.example.common.constant.DelayOrderConstants.DELAY_EXCHANGE_NAME;
+import static com.example.common.constant.DelayOrderConstants.DELAY_ORDER_KEY;
+import static com.example.common.constant.UserConstants.USER_HOLDER;
 
 /**
  * <p>
@@ -50,6 +58,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     /**
      * 新增交易单
      */
+    //todo 测试延迟消息
     @Override
     @GlobalTransactional
     public Result<OrderVO> addOrder(OrderFormDTO orderFormDTO) {
@@ -82,13 +91,16 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         List<OrderDetail> detailList = buildDetails(order.getId(), itemDTOList, itemMap);
         orderDetailService.saveBatch(detailList);
         //远程调用，扣减库存
-        try {
-            itemClient.deductStock(details);
-        } catch (Exception e) {
-            throw new RuntimeException("库存不足！:",e);
-        }
+        itemClient.deductStock(details);
         //异步消息，清理购物车
-        rabbitMqHelper.sendMessage("cart.topic","deduct.cart",ids);
+        //将用户信息添加到消息头部
+        MessageProperties messageProperties = new MessageProperties();
+        messageProperties.setHeader(USER_HOLDER,UserHolder.getUserId());
+        //封装消息
+        Message message = new Message(JSONUtil.toJsonStr(ids).getBytes(), messageProperties);
+        rabbitMqHelper.sendMessage("cart.topic","deduct.cart",message);
+        //TODO 延迟查询订单支付状态
+        rabbitMqHelper.sendDelayMessage(DELAY_EXCHANGE_NAME,DELAY_ORDER_KEY,order.getId());
         //封装返回数据 返回
         OrderVO orderVO = BeanUtil.toBean(order, OrderVO.class);
         orderVO.setOrderDetailList(detailList);
@@ -136,13 +148,14 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             b = lambdaUpdate()
                     .set(Order::getStatus, 5)
                     .eq(Order::getId, orderId)
+                    .notIn(Order::getStatus,5)
                     .update();
         } catch (Exception e) {
             throw new BadCancelOrderException("订单取消失败");
         }
         //返回库存
         if (!b){
-           return Result.error("订单取消失败:"+orderId);
+           return Result.error("订单取消失败:"+orderId+",可能已取消");
         }
         //获取交易单详情
         List<OrderDetail> orderDetailList = orderDetailService.getByOrderId(orderId);

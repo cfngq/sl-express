@@ -5,7 +5,9 @@ import com.example.cart.domain.po.Cart;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.example.cart.domain.vo.CartVO;
 import com.example.common.result.Result;
+import org.springframework.amqp.core.Message;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -21,4 +23,7 @@ public interface ICartService extends IService<Cart> {
     List<CartVO> queryAll();
 
     Result<String> saveCart(CartFormDTO cartFormDTO);
+
+//    void removeCartItem(Collection<Long> itemIds);
+    void removeCartItem(Message message);
 }

@@ -1,5 +1,6 @@
 package com.example.pay.service;
 
+import com.example.common.domain.message.MultiDelayMessage;
 import com.example.common.result.Result;
 import com.example.pay.domain.dto.PayApplyDTO;
 import com.example.pay.domain.dto.PayOrderFormDTO;
@@ -19,4 +20,6 @@ public interface IPayOrderService extends IService<PayOrder> {
     Result<String> applyPayOrder(PayApplyDTO payApplyDTO);
 
     Result<String> tryPayOrderByBalance(PayOrderFormDTO payOrderFormDTO);
+
+    void getByOrderId(MultiDelayMessage<Object> message);
 }

@@ -33,9 +33,9 @@ public class AddressController {
 //根据地址id查询该用户地址信息,查询当前用户所有地址,新增地址,update
     private final IAddressService addressService;
 
-    @GetMapping("/{addressId}")
+    @GetMapping("/id")
     @ApiOperation("根据地址id查询该用户地址信息")
-    public Result<AddressDTO> getById(@PathVariable("addressId") Long id){
+    public Result<AddressDTO> getById(@RequestParam("addressId") Long id){
         Address address = addressService.getById(id);
         if (!address.getUserId().equals(UserHolder.getUserId())){
             throw new BadRequestException("该地址不属于该用户！");
@@ -45,7 +45,7 @@ public class AddressController {
 
     @GetMapping
     @ApiOperation("查询当前用户所有地址")
-    public Result<String> getAll(){
+    public Result<List<AddressDTO>> getAll(){
         return addressService.queryAll();
     }
 
@@ -59,7 +59,7 @@ public class AddressController {
 
     @PostMapping("/update")
     @ApiOperation("更新地址信息")
-    public Result<String> update(AddressDTO addressDTO){
+    public Result<String> update(@RequestBody AddressDTO addressDTO){
         return addressService.updateAddress(addressDTO);
     }
 }

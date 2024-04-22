@@ -3,6 +3,7 @@ package com.example.cart.listener;
 import com.example.cart.service.ICartService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.core.ExchangeTypes;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.*;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +22,7 @@ public class deductCartListener {
             exchange = @Exchange(name = "cart.topic",type = ExchangeTypes.TOPIC),
             key = "deduct.cart"
     ))
-    public void listenDeductCart(Collection<Long> itemIds){
-        cartService.removeByIds(itemIds);
+    public void listenDeductCart(Message message){
+        cartService.removeCartItem(message);
     }
 }

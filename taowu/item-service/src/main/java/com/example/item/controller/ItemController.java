@@ -2,27 +2,23 @@ package com.example.item.controller;
 
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSON;
+
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.example.common.constant.ItemConstants;
+
 import com.example.common.domain.Page.PageDTO;
 import com.example.common.domain.Page.PageQuery;
 import com.example.common.result.Result;
 import com.example.item.domain.dto.ItemDTO;
 import com.example.item.domain.dto.OrderDetailDTO;
 import com.example.item.domain.po.Item;
-import com.example.item.domain.query.ItemQuery;
 import com.example.item.service.IItemService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-import static com.example.common.constant.ItemConstants.ITEM_ID;
 
 /**
  * <p>
@@ -51,10 +47,11 @@ public class ItemController {
         return Result.success(BeanUtil.copyToList(itemService.listByIds(ids), ItemDTO.class));
     }
 
-    @DeleteMapping()
+    @DeleteMapping
     @ApiOperation("根据商品id删除商品")
-    public void deleteById(@RequestParam("id") Long id){
-        itemService.removeById(id);
+    public Result<String> deleteById(@RequestParam("id") Long id){
+        return itemService.removeItem(id);
+
     }
 
     @GetMapping("/page")
@@ -65,10 +62,10 @@ public class ItemController {
     }
     //更新商品状态  更新商品 扣减库存
 
-    @PostMapping("/status/{id}/{status}")
+    @PostMapping("/status")
     @ApiOperation("更新商品状态")
-    public Result<String> status(@PathVariable("id") Long id,
-                       @PathVariable("status")Integer status){
+    public Result<String> status(@RequestParam("id") Long id,
+                       @RequestParam("status")Integer status){
         return itemService.updateStatus(id,status);
     }
 

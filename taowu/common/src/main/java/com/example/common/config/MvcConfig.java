@@ -15,8 +15,10 @@ public class MvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(new UserInfoInterceptor())
                 .addPathPatterns("/cart/**")
                 .addPathPatterns("/user/me","/user/deduct")
+                .addPathPatterns("/address/**")
                 .addPathPatterns("/order/**")
                 .addPathPatterns("/pay-order/**")
+                .addPathPatterns("/item/**")
                 .order(1);
     }
 }

@@ -30,4 +30,6 @@ public interface IItemService extends IService<Item> {
 
     Result<String> deductStock(List<OrderDetailDTO> orderDetailDTOList);
     void updateItemNum(List<OrderDetailDTO> orderDetailDTOS);
+
+    Result<String> removeItem(Long id);
 }

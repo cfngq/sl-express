@@ -3,11 +3,13 @@ package com.example.item.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONNull;
 import cn.hutool.json.JSONUtil;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.common.domain.Page.PageDTO;
 import com.example.common.enums.ItemStatus;
+import com.example.common.exception.UpdateItemNumException;
 import com.example.common.result.Result;
 import com.example.common.utils.CacheClient;
 import com.example.common.utils.UserHolder;
@@ -22,18 +24,15 @@ import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static com.example.common.constant.ItemConstants.*;
-import static com.example.common.constant.RedisConstants.*;
 
 /**
  * <p>
@@ -56,13 +55,12 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
         //缓存
         String json = cacheClient.get(itemKey);
         if (StrUtil.isNotBlank(json)) {
-            ItemDTO itemDTO = BeanUtil.toBean(json, ItemDTO.class);
-            return Result.success(itemDTO);
+            return Result.success(JSONUtil.toBean(json, ItemDTO.class));
         }
         //缓存重建
         Item item = getById(id);
         ItemDTO itemDTO = BeanUtil.toBean(item, ItemDTO.class);
-        cacheClient.set(itemKey,StrUtil.toString(itemDTO),ITEM_ID_TTL,TimeUnit.MINUTES);
+        cacheClient.set(itemKey, JSONUtil.toJsonStr(itemDTO),ITEM_ID_TTL,TimeUnit.MINUTES);
         return Result.success(itemDTO);
     }
 
@@ -111,7 +109,7 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
         //从redis中查询分页数据
         String total = String.valueOf(cacheClient.getHash(searchKey, TOTAL_KEY));
         String pages = String.valueOf(cacheClient.getHash(searchKey, PAGES_KEY));
-        String json = String.valueOf(cacheClient.getHash(searchKey, DATA_KEY));
+        String json = JSONUtil.toJsonStr(cacheClient.getHash(searchKey, DATA_KEY));
         //成功查询则封装并返回
         PageDTO<ItemDTO> itemDTOPageDTO = new PageDTO<>();
         if (StrUtil.isNotBlank(json) && StrUtil.isNotBlank(total) && StrUtil.isNotBlank(pages)){
@@ -121,7 +119,7 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
             return itemDTOPageDTO;
         }
         //是否为空值
-        if (json != null || total!= null || pages!=null){
+        if (json != null && total!= null && pages!=null){
             return itemDTOPageDTO;
         }
         //失败则从数据库中查询
@@ -134,7 +132,7 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
                 .page(itemQuery.toMpPage());
         //保存至redis并返回
         PageDTO<ItemDTO> of = PageDTO.of(page, ItemDTO.class);
-        cacheClient.setHash(searchKey,TOTAL_KEY,PAGES_KEY,DATA_KEY,of.getTotal(),of.getPages(),JSONUtil.toJsonStr(of.getList()),SEARCH_KEY_TTL,TimeUnit.MINUTES);
+        cacheClient.setHash(searchKey,TOTAL_KEY,PAGES_KEY,DATA_KEY,of.getTotal().toString(),of.getPages().toString(),JSONUtil.toJsonStr(of.getList()),SEARCH_KEY_TTL,TimeUnit.MINUTES);
         return of;
     }
 
@@ -143,11 +141,12 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
     @Transactional
     public Result<String> deductStock(List<OrderDetailDTO> orderDetailDTOList) {
         //基于分布式锁实现事务一致
-        RLock lock = redissonClient.getLock(LOCK_DEDUCT_STOCK_KEY + UserHolder.getUserId());
-        //设置锁的过期时间，实现保底处理
-        cacheClient.expire(StrUtil.toString(lock),LOCK_DEDUCT_STOCK_TTL,TimeUnit.MINUTES);
+        String deductKey = LOCK_DEDUCT_STOCK_KEY + UserHolder.getUserId();
+        RLock lock = redissonClient.getLock(deductKey);
         //上锁
         boolean isLock = lock.tryLock();
+        //设置锁的过期时间，实现保底处理
+        cacheClient.expire(deductKey,LOCK_DEDUCT_STOCK_TTL,TimeUnit.MINUTES);
         //加锁失败
         if (!isLock) {
             return Result.error("请先完成上个订单在进行新的订单！");
@@ -189,11 +188,25 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
     @Override
     public void updateItemNum(List<OrderDetailDTO> orderDetailDTOS) {
         orderDetailDTOS.forEach(orderDetailDTO -> {
-            lambdaUpdate()
-                    .set(Item::getStock,getById(orderDetailDTO.getItemId()).getStock()+orderDetailDTO.getNum())
-                    .eq(Item::getId,orderDetailDTO.getItemId())
-                    .update();
+            try {
+                boolean b = lambdaUpdate()
+                        .set(Item::getStock, getById(orderDetailDTO.getItemId()).getStock() + orderDetailDTO.getNum())
+                        .eq(Item::getId, orderDetailDTO.getItemId())
+                        .update();
+            } catch (Exception e) {
+                throw new UpdateItemNumException("更新商品数量失败"+orderDetailDTO.getItemId());
+            }
         });
+    }
+
+    //删除商品
+    @Override
+    public Result<String> removeItem(Long id) {
+        boolean b = removeById(id);
+        if (!b){
+            return Result.error("该商品不存在");
+        }
+        return Result.success("删除成功");
     }
     //基于查询更新同步的批处理  问题：executeBatch无法处理单个sql false
       /*  String sqlStatement = "com.example.item.mapper.ItemMapper.updateStock";

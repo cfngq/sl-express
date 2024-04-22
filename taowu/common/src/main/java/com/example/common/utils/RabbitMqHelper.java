@@ -1,11 +1,14 @@
 package com.example.common.utils;
 
 import cn.hutool.core.lang.UUID;
+import com.example.common.domain.message.MultiDelayMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.util.concurrent.ListenableFutureCallback;
+
+import static com.example.common.constant.DelayOrderConstants.DELAY_ORDER_TIME;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -19,11 +22,9 @@ public class RabbitMqHelper {
     }
 
     //延迟时间确定的消息发送
-    public void sendDelayMessage(String exchange, String routingKey, Object msg, int delay){
-        rabbitTemplate.convertAndSend(exchange, routingKey, msg, message -> {
-            message.getMessageProperties().setDelay(delay);
-            return message;
-        });
+    public void sendDelayMessage(String exchange, String routingKey, Object msg){
+        MultiDelayMessage<Object> message = MultiDelayMessage.of(msg, DELAY_ORDER_TIME);
+        rabbitTemplate.convertAndSend(exchange, routingKey, message);
     }
     //发送者确认
     public void sendMessageWithConfirm(String exchange, String routingKey, Object msg, int maxRetries){
